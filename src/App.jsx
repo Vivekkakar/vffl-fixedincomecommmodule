@@ -86,7 +86,7 @@ async function generateCommentary(bonds, wavg, hdfcRate) {
   const bondList = bonds.map(b=>`${b.bond_name} (${b.yield_pct}% yield, matures ${b.maturity_date})`).join("; ");
   const today = new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"long",year:"numeric"});
   const prompt = `You are a senior fixed income analyst at Vivek Financial Focus Limited. Today is ${today}. Write a concise professional market commentary (3 short paragraphs, plain text only, no bullet points, no markdown, no headings) for a client bond portfolio report.\n\nPara 1: Current Indian interest rate environment, RBI policy stance, repo rate direction, inflation trajectory. Briefly mention global factors if relevant.\nPara 2: How this rate scenario impacts the client portfolio (weighted avg yield: ${wavg}%, bonds: ${bondList}).\nPara 3: Forward-looking 90-day view on holding strategy and reinvestment. No explicit forecasts.\n\nRules: Authoritative, calm, client-friendly. Do NOT invent specific dates or events. Under 220 words. Plain prose only. NO markdown, NO bold, NO headers, NO bullet points whatsoever.`;
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+  const resp = await fetch("/api/anthropic", {
     method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000, messages:[{role:"user",content:prompt}] })
   });
@@ -263,6 +263,8 @@ export default function App() {
   const [done, setDone] = useState(false);
   const [fetchingRates, setFetchingRates] = useState(false);
   const [logoDataUrl, setLogoDataUrl] = useState(null);
+  const [showTemplate, setShowTemplate] = useState(false);
+  const [csvCopied, setCsvCopied] = useState(false);
   const fileRef = useRef();
   const logoRef = useRef();
 
@@ -292,7 +294,7 @@ export default function App() {
   const fetchRates = async () => {
     setFetchingRates(true);
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      const resp = await fetch("/api/anthropic", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:300,
           tools:[{type:"web_search_20250305",name:"web_search"}],
@@ -341,16 +343,10 @@ export default function App() {
     setGenerating(false);
   };
 
-  const downloadTemplate = () => {
-    const blob = new Blob([SAMPLE_CSV], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "portfolio_template.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  const copyTemplate = () => {
+    navigator.clipboard.writeText(SAMPLE_CSV)
+      .then(()=>{setCsvCopied(true);setTimeout(()=>setCsvCopied(false),2500);})
+      .catch(()=>{});
   };
 
   const c = "#C45717";
@@ -404,11 +400,25 @@ export default function App() {
             Clients sharing the same <code style={{background:"#f5ede0",color:c,padding:"1px 5px",borderRadius:3,fontSize:10}}>family_group</code> are consolidated into one report.
           </p>
           <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-            <button style={btn(true)} onClick={downloadTemplate}>↓ Download Template CSV</button>
+            <button style={btn(true)} onClick={()=>setShowTemplate(t=>!t)}>{showTemplate?"▲ Hide Template":"↓ CSV Template"}</button>
             <button style={btn(false)} onClick={()=>fileRef.current?.click()}>↑ Upload CSV</button>
             <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} style={{display:"none"}}/>
             {csvData && <span style={{fontSize:11,color:"#4a8a4a"}}>✓ {parsed?.length} bond rows loaded</span>}
           </div>
+          {showTemplate && (
+            <div style={{marginTop:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                <span style={{fontSize:10,color:"#9a7050"}}>Copy → paste into text editor → save as <strong>.csv</strong></span>
+                <button onClick={copyTemplate} style={{...btn(false),padding:"3px 12px",fontSize:10,background:csvCopied?"#4a8a4a":c}}>{csvCopied?"✓ Copied!":"Copy"}</button>
+              </div>
+              <textarea readOnly value={SAMPLE_CSV} style={{width:"100%",height:80,fontSize:9.5,fontFamily:"monospace",background:"#fdf8f2",border:"1px solid #dfd0ba",borderRadius:5,padding:7,color:"#5a3a1a",resize:"vertical",boxSizing:"border-box",outline:"none"}}/>
+              <div style={{marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1px 18px",fontSize:10,color:"#9a7050",lineHeight:1.9}}>
+                {[["client_id","Unique client ID"],["client_name","Full name"],["family_group","Shared = one consolidated PDF"],["bond_name","Bond description"],["isin","ISIN code"],["num_bonds","Units held"],["face_value_invested","Total face value"],["date_of_investment","Date funds were invested (YYYY-MM-DD)"],["yield_pct","Yield to maturity"],["coupon_rate","Coupon rate"],["purchase_date","YYYY-MM-DD"],["issue_date","YYYY-MM-DD"],["maturity_date","YYYY-MM-DD"],["interest_frequency","Monthly/Quarterly/Half-Yearly/Annual"],["credit_rating","AAA / AA+ / AA"],["rating_agency","CRISIL / ICRA / CARE"],["cf_date_1…24","Future cashflow dates"],["cf_amount_1…24","Cashflow amounts"]].map(([col,desc])=>(
+                  <div key={col}><code style={{background:"#f0e4d0",color:c,padding:"0 3px",borderRadius:2,fontSize:9.5}}>{col}</code> — {desc}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Step 2 */}
